@@ -2,12 +2,32 @@ let transactions = [];
 let myChart;
 
 fetch("/api/transaction")
-  .then(response => {
+  .then((response) => {
     return response.json();
   })
-  .then(data => {
+  .then((data) => {
     // save db data on global variable
     transactions = data;
+
+    const transaction1 = db.transaction(['BudgetStore'], 'readwrite');
+    const store1 = transaction1.objectStore('BudgetStore');
+    const getAll = store1.getAll();
+    getAll.onsuccess = function () {
+      if (getAll.result.length > 0) {
+        trans = transactions.concat(getAll.result);
+        console.log(getAll.result);
+        console.log(transactions);
+        transactions = trans;
+        console.log(transactions);
+        populateTotal();
+        populateTable();
+        populateChart();
+      }
+      };
+      console.log(transactions);
+
+
+
 
     populateTotal();
     populateTable();
@@ -28,7 +48,7 @@ function populateTable() {
   let tbody = document.querySelector("#tbody");
   tbody.innerHTML = "";
 
-  transactions.forEach(transaction => {
+  transactions.forEach((transaction) => {
     // create and populate a table row
     let tr = document.createElement("tr");
     tr.innerHTML = `
@@ -46,13 +66,13 @@ function populateChart() {
   let sum = 0;
 
   // create date labels for chart
-  let labels = reversed.map(t => {
+  let labels = reversed.map((t) => {
     let date = new Date(t.date);
     return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
   });
 
   // create incremental values for chart
-  let data = reversed.map(t => {
+  let data = reversed.map((t) => {
     sum += parseInt(t.value);
     return sum;
   });
@@ -65,16 +85,18 @@ function populateChart() {
   let ctx = document.getElementById("myChart").getContext("2d");
 
   myChart = new Chart(ctx, {
-    type: 'line',
-      data: {
-        labels,
-        datasets: [{
-            label: "Total Over Time",
-            fill: true,
-            backgroundColor: "#6666ff",
-            data
-        }]
-    }
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Total Over Time",
+          fill: true,
+          backgroundColor: "#6666ff",
+          data,
+        },
+      ],
+    },
   });
 }
 
@@ -87,8 +109,7 @@ function sendTransaction(isAdding) {
   if (nameEl.value === "" || amountEl.value === "") {
     errorEl.textContent = "Missing Information";
     return;
-  }
-  else {
+  } else {
     errorEl.textContent = "";
   }
 
@@ -96,7 +117,7 @@ function sendTransaction(isAdding) {
   let transaction = {
     name: nameEl.value,
     value: amountEl.value,
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
   };
 
   // if subtracting funds, convert amount to negative number
@@ -111,43 +132,165 @@ function sendTransaction(isAdding) {
   populateChart();
   populateTable();
   populateTotal();
-  
+
   // also send to server
   fetch("/api/transaction", {
     method: "POST",
     body: JSON.stringify(transaction),
     headers: {
       Accept: "application/json, text/plain, */*",
-      "Content-Type": "application/json"
-    }
+      "Content-Type": "application/json",
+    },
   })
-  .then(response => {    
-    return response.json();
-  })
-  .then(data => {
-    if (data.errors) {
-      errorEl.textContent = "Missing Information";
-    }
-    else {
+    .then((response) => {
+      return response.json();
+    })
+    .then((data) => {
+      if (data.errors) {
+        errorEl.textContent = "Missing Information";
+      } else {
+        // clear form
+        nameEl.value = "";
+        amountEl.value = "";
+      }
+    })
+    .catch((err) => {
+      // fetch failed, so save in indexed db
+      saveRecord(transaction);
+
       // clear form
       nameEl.value = "";
       amountEl.value = "";
-    }
-  })
-  .catch(err => {
-    // fetch failed, so save in indexed db
-    saveRecord(transaction);
-
-    // clear form
-    nameEl.value = "";
-    amountEl.value = "";
-  });
+    });
 }
 
-document.querySelector("#add-btn").onclick = function() {
+document.querySelector("#add-btn").onclick = function () {
   sendTransaction(true);
 };
 
-document.querySelector("#sub-btn").onclick = function() {
+document.querySelector("#sub-btn").onclick = function () {
   sendTransaction(false);
 };
+
+
+
+
+let db;
+let budgetVersion;
+
+if (!window.indexedDB) {
+  console.log(`Your browser doesn't support IndexedDB`);
+
+  // return;
+}
+else{
+  console.log("IndexedDB supported");
+}
+
+// Create a new db request for a "budget" database.
+const request = indexedDB.open('BudgetDB', budgetVersion || 1);
+
+// Check databases versions
+request.onupgradeneeded = function (e) {
+  console.log(`Upgrade needed in IndexDB`);
+
+  const { oldVersion } = e;
+  const newVersion = e.newVersion || db.version;
+  
+  console.log(`DB Updated from version ${oldVersion} to ${newVersion}`);
+
+  db = e.target.result;
+  console.log(db);
+
+  // Create the Object Store if not created
+  if (db.objectStoreNames.length === 0) {
+    db.createObjectStore('BudgetStore', { autoIncrement: true });
+  }
+};
+
+
+// If Error requesting opening database
+request.onerror = function (e) {
+  console.log(`Woops! ${e.target.errorCode}`);
+};
+
+// 
+function checkDatabase() {
+  console.log('check db invoked');
+
+  // Open a transaction on your BudgetStore db
+  let transaction = db.transaction(['BudgetStore'], 'readwrite');
+
+  // access your BudgetStore object
+  const store = transaction.objectStore('BudgetStore');
+
+  // Get all records from store and set to a variable
+  const getAll = store.getAll();
+
+  // If the request was successful
+  getAll.onsuccess = function () {
+    // If there are items in the store, we need to bulk add them when we are back online
+    if (getAll.result.length > 0) {
+      fetch('/api/transaction/bulk', {
+        method: 'POST',
+        body: JSON.stringify(getAll.result),
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'Content-Type': 'application/json',
+        },
+      })
+        .then((response) => response.json())
+        .then((res) => {
+          // If our returned response is not empty
+          if (res.length !== 0) {
+            // Open another transaction to BudgetStore with the ability to read and write
+            transaction = db.transaction(['BudgetStore'], 'readwrite');
+
+            // Assign the current store to a variable
+            const currentStore = transaction.objectStore('BudgetStore');
+
+            // Clear existing entries because our bulk add was successful
+            currentStore.clear();
+            console.log('Clearing store 🧹');
+          }
+        });
+    }
+  };
+}
+
+request.onsuccess = function (e) {
+  console.log('success');
+  db = e.target.result;
+
+  // Check if app is online before reading from db
+  if (navigator.onLine) {
+    console.log('Backend online! 🗄️');
+    checkDatabase();
+  }
+};
+
+const saveRecord = (record) => {
+  console.log('Save record invoked');
+  // Create a transaction on the BudgetStore db with readwrite access
+  const transaction = db.transaction(['BudgetStore'], 'readwrite');
+
+  // Access your BudgetStore object store
+  const store = transaction.objectStore('BudgetStore');
+
+  // Add record to your store with add method.
+  store.add(record);
+
+  // transactions.push(record);
+
+
+
+
+  populateTotal();
+  populateTable();
+  populateChart();
+
+
+};
+
+// Listen for app coming back online
+window.addEventListener('online', checkDatabase);
