@@ -1,28 +1,43 @@
 let db;
 let budgetVersion;
 
-// Create a new db request for a "budget" database.
-const request = indexedDB.open('BudgetDB', budgetVersion || 21);
+if (!window.indexedDB) {
+  console.log(`Your browser doesn't support IndexedDB`);
 
+  // return;
+}
+else{
+  console.log("IndexedDB supported");
+}
+
+// Create a new db request for a "budget" database.
+const request = indexedDB.open('BudgetDB', budgetVersion || 1);
+
+// Check databases versions
 request.onupgradeneeded = function (e) {
-  console.log('Upgrade needed in IndexDB');
+  console.log(`Upgrade needed in IndexDB`);
 
   const { oldVersion } = e;
   const newVersion = e.newVersion || db.version;
-
+  
   console.log(`DB Updated from version ${oldVersion} to ${newVersion}`);
 
   db = e.target.result;
+  console.log(db);
 
+  // Create the Object Store if not created
   if (db.objectStoreNames.length === 0) {
     db.createObjectStore('BudgetStore', { autoIncrement: true });
   }
 };
 
+
+// If Error requesting opening database
 request.onerror = function (e) {
   console.log(`Woops! ${e.target.errorCode}`);
 };
 
+// 
 function checkDatabase() {
   console.log('check db invoked');
 
@@ -91,3 +106,4 @@ const saveRecord = (record) => {
 
 // Listen for app coming back online
 window.addEventListener('online', checkDatabase);
+
