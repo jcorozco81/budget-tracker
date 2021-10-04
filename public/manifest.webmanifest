@@ -1,0 +1,28 @@
+{
+    "name": "Budget Tracker",
+    "short_name": "Burget Tracker",
+    "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x169",
+          "type": "image/png"
+        },
+        {
+          "src": "/icons/icon-512x512.png",
+          "sizes": "512x452",
+          "type": "image/png"
+        },
+        {
+        "src": "/icons/money-240x240.png",
+        "sizes": "240x240",
+        "type": "image/png"
+      }
+
+        
+      ],
+    "theme_color": "#ffffff",
+    "background_color": "#ffffff",
+    "start_url": "/",
+    "display": "standalone"
+  }
+  
